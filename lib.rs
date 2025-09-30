@@ -27,7 +27,7 @@ mod inky_todo {
     /// Defines the storage of your contract.
     #[ink(storage)]
     pub struct InkyTodo {
-        next_todo_id: u32,
+        next_id: u32,
         todos: Mapping<u32, Todo>,
     }
 
@@ -64,7 +64,7 @@ mod inky_todo {
         #[ink(constructor)]
         pub fn new() -> Self {
             Self {
-                next_todo_id: 1,
+                next_id: 1,
                 todos: Mapping::new(),
             }
         }
@@ -73,7 +73,7 @@ mod inky_todo {
         #[ink(message)]
         pub fn create_todo(&mut self, title: String, description: String) -> Result<u32, String> {
         
-            let todo_id = self.next_todo_id;
+            let todo_id = self.next_id;
             
             // Validate input
             if title.is_empty() {
@@ -87,11 +87,8 @@ mod inky_todo {
                 status: TodoStatus::Pending,
             };
 
-            // Store the todo
             self.todos.insert(todo_id, &todo);
-
-            // Increment next todo ID
-            self.next_todo_id = self.next_todo_id.saturating_add(1);
+            self.next_id = self.next_id.saturating_add(1);
 
             // Emit event
             self.env().emit_event(TodoCreated {
@@ -117,13 +114,13 @@ mod inky_todo {
                 .ok_or("Todo not found")?;
 
             // Update the todo
-            todo.status = new_status.clone();
+            todo.status = new_status;
             self.todos.insert(todo_id, &todo);
 
             // Emit event
             self.env().emit_event(TodoUpdated {
                 todo_id,
-                new_status,
+                new_status: todo.status,
             });
 
             Ok(())
@@ -135,7 +132,6 @@ mod inky_todo {
             // Check if todo exists and get its title
             let todo = self.todos.get(todo_id)
                 .ok_or("Todo not found")?;
-            let title = todo.title.clone();
 
             // Remove from storage
             self.todos.remove(todo_id);
@@ -143,7 +139,7 @@ mod inky_todo {
             // Emit event
             self.env().emit_event(TodoDeleted {
                 todo_id,
-                title,
+                title: todo.title,
             });
 
             Ok(())
