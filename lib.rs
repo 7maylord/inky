@@ -5,14 +5,12 @@ mod inky_todo {
     use ink::storage::Mapping;
     use ink::prelude::string::{String, ToString};
     
-
     /// Represents the status of a todo item
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
     pub enum TodoStatus {
         Pending,
         Completed,
-        Cancelled,
     }
 
     /// Represents a todo item
@@ -100,13 +98,13 @@ mod inky_todo {
             Ok(todo_id)
         }
 
-        /// Get a specific todo by ID
+        /// Get a todo by ID
         #[ink(message)]
         pub fn get_todo(&self, todo_id: u32) -> Option<Todo> {
             self.todos.get(todo_id)
         }
 
-        /// Update a todo item's status
+        /// Update a todo status
         #[ink(message)]
         pub fn update_todo_status( &mut self, todo_id: u32, new_status: TodoStatus ) -> Result<(), String> {
             
@@ -127,10 +125,10 @@ mod inky_todo {
             Ok(())
         }
 
-        /// Delete a todo item
+        /// Delete a todo
         #[ink(message)]
         pub fn delete_todo(&mut self, todo_id: u32) -> Result<(), String> {
-            // Check if todo exists and get its title
+            // Check if todo exists
             let todo = self.todos.get(todo_id)
                 .ok_or("Todo not found")?;
 
