@@ -1,141 +1,153 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
 #[ink::contract]
-mod inky_bro {
+mod inky_todo {
+    use ink::prelude::string::{String, ToString};
+    use ink::storage::Mapping;
+
+    /// Represents the status of a todo item
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
+    pub enum TodoStatus {
+        Pending,
+        Completed,
+        Cancelled,
+    }
+
+    /// Represents a todo item
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
+    pub struct Todo {
+        pub id: u32,
+        pub title: String,
+        pub description: String,
+        pub status: TodoStatus,
+    }
 
     /// Defines the storage of your contract.
-    /// Add new fields to the below struct in order
-    /// to add new static storage fields to your contract.
-    #[ink(storage, event)]
-    pub struct InkyBro {
-        /// Stores a single `bool` value on the storage.
-        value: bool,
+    #[ink(storage)]
+    pub struct InkyTodo {
+        next_todo_id: u32,
+        todos: Mapping<u32, Todo>,
     }
 
-    impl InkyBro {
-        /// Constructor that initializes the `bool` value to the given `init_value`.
+    /// Events 
+    #[ink(event)]
+    pub struct TodoCreated {
+        #[ink(topic)]
+        todo_id: u32,
+        title: String,
+    }
+
+    #[ink(event)]
+    pub struct TodoUpdated {
+        #[ink(topic)]
+        todo_id: u32,
+        new_status: TodoStatus,
+    }
+
+    #[ink(event)]
+    pub struct TodoDeleted {
+        #[ink(topic)]
+        todo_id: u32,
+        title: String,
+    }
+
+    impl Default for InkyTodo {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl InkyTodo {
+        /// Constructor
         #[ink(constructor)]
-        pub fn new(init_value: bool) -> Self {
-            Self { value: init_value }
+        pub fn new() -> Self {
+            Self {
+                next_todo_id: 1,
+                todos: Mapping::new(),
+            }
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
-        #[ink(constructor)]
-        pub fn default() -> Self {
-            Self::new(Default::default())
-        }
-
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
+        /// Create a new todo item
         #[ink(message)]
-        pub fn flip(&mut self) {
-            self.value = !self.value;
+        pub fn create_todo(&mut self, title: String, description: String) -> Result<u32, String> {
+        
+            let todo_id = self.next_todo_id;
+            
+            // Validate input
+            if title.is_empty() {
+                return Err("Title cannot be empty".to_string());
+            }
+
+            let todo = Todo {
+                id: todo_id,
+                title: title.clone(),
+                description,
+                status: TodoStatus::Pending,
+            };
+
+            // Store the todo
+            self.todos.insert(todo_id, &todo);
+
+            // Increment next todo ID
+            self.next_todo_id = self.next_todo_id.saturating_add(1);
+
+            // Emit event
+            self.env().emit_event(TodoCreated {
+                todo_id,
+                title,
+            });
+
+            Ok(todo_id)
         }
 
-        /// Simply returns the current value of our `bool`.
+        /// Get a specific todo by ID
         #[ink(message)]
-        pub fn get(&self) -> bool {
-            self.value
-        }
-    }
-
-    /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
-    /// module and test functions are marked with a `#[test]` attribute.
-    /// The below code is technically just normal Rust code.
-    #[cfg(test)]
-    mod tests {
-        /// Imports all the definitions from the outer scope so we can use them here.
-        use super::*;
-
-        /// We test if the default constructor does its job.
-        #[ink::test]
-        fn default_works() {
-            let inky_bro = InkyBro::default();
-            assert_eq!(inky_bro.get(), false);
+        pub fn get_todo(&self, todo_id: u32) -> Option<Todo> {
+            self.todos.get(todo_id)
         }
 
-        /// We test a simple use case of our contract.
-        #[ink::test]
-        fn it_works() {
-            let mut inky_bro = InkyBro::new(false);
-            assert_eq!(inky_bro.get(), false);
-            inky_bro.flip();
-            assert_eq!(inky_bro.get(), true);
-        }
-    }
+        /// Update a todo item's status
+        #[ink(message)]
+        pub fn update_todo_status( &mut self, todo_id: u32, new_status: TodoStatus ) -> Result<(), String> {
+            
+            // Check if todo exists
+            let mut todo = self.todos.get(todo_id)
+                .ok_or("Todo not found")?;
 
+            // Update the todo
+            todo.status = new_status.clone();
+            self.todos.insert(todo_id, &todo);
 
-    /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
-    ///
-    /// When running these you need to make sure that you:
-    /// - Compile the tests with the `e2e-tests` feature flag enabled (`--features e2e-tests`)
-    /// - Are running a Substrate node which contains `pallet-contracts` in the background
-    #[cfg(all(test, feature = "e2e-tests"))]
-    mod e2e_tests {
-        /// Imports all the definitions from the outer scope so we can use them here.
-        use super::*;
-
-        /// A helper function used for calling contract messages.
-        use ink_e2e::ContractsBackend;
-
-        /// The End-to-End test `Result` type.
-        type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
-        /// We test that we can upload and instantiate the contract using its default constructor.
-        #[ink_e2e::test]
-        async fn default_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-            // Given
-            let mut constructor = InkyBroRef::default();
-
-            // When
-            let contract = client
-                .instantiate("inky_bro", &ink_e2e::alice(), &mut constructor)
-                .submit()
-                .await
-                .expect("instantiate failed");
-            let call_builder = contract.call_builder::<InkyBro>();
-
-            // Then
-            let get = call_builder.get();
-            let get_result = client.call(&ink_e2e::alice(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), false));
+            // Emit event
+            self.env().emit_event(TodoUpdated {
+                todo_id,
+                new_status,
+            });
 
             Ok(())
         }
 
-        /// We test that we can read and write a value from the on-chain contract.
-        #[ink_e2e::test]
-        async fn it_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-            // Given
-            let mut constructor = InkyBroRef::new(false);
-            let contract = client
-                .instantiate("inky_bro", &ink_e2e::bob(), &mut constructor)
-                .submit()
-                .await
-                .expect("instantiate failed");
-            let mut call_builder = contract.call_builder::<InkyBro>();
+        /// Delete a todo item
+        #[ink(message)]
+        pub fn delete_todo(&mut self, todo_id: u32) -> Result<(), String> {
+            // Check if todo exists and get its title
+            let todo = self.todos.get(todo_id)
+                .ok_or("Todo not found")?;
+            let title = todo.title.clone();
 
-            let get = call_builder.get();
-            let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), false));
+            // Remove from storage
+            self.todos.remove(todo_id);
 
-            // When
-            let flip = call_builder.flip();
-            let _flip_result = client
-                .call(&ink_e2e::bob(), &flip)
-                .submit()
-                .await
-                .expect("flip failed");
-
-            // Then
-            let get = call_builder.get();
-            let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), true));
+            // Emit event
+            self.env().emit_event(TodoDeleted {
+                todo_id,
+                title,
+            });
 
             Ok(())
         }
+
     }
 }
