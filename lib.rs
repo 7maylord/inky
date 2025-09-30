@@ -2,8 +2,9 @@
 
 #[ink::contract]
 mod inky_todo {
-    use ink::prelude::string::{String, ToString};
     use ink::storage::Mapping;
+    use ink::prelude::string::{String, ToString};
+    
 
     /// Represents the status of a todo item
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
